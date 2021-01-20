@@ -98,10 +98,10 @@ class Promise {
     let promise2 = new Promise((resolve, reject) => {
       // 如果是成功就执行成功的回调用  失败就执行失败的回调
       /**
-       * then 中的 回调函数 返回的也可能是个 Promise ，当返回的是个Promise的时候会以该Promise的状态向外传递
-       * 假设返回的是个Promise，记为promise2，则需要先拿到当前的 Promise
-       * 对当前 Promise 的 resolve reject 回调函数委托到外层 promise2 上进行处理
-       * 使用 setTimeout 拿到 promise2,抽离出resolvePromise函数，而该函数恰是链式调用的关键所在
+       * then中的回调函数返回的也可能是个Promise,当返回的是个Promise的时候会以该Promise的状态向外传递
+       * 假设返回的是个Promise,记为promise2,则需要先拿到当前的 Promise
+       * 对当前Promise的resolve/reject回调函数委托到外层promise2上进行处理
+       * 使用setTimeout拿到promise2,抽离出resolvePromise函数,而该函数恰是链式调用的关键所在
        */
       if (this.status === FULFILLED) {
         setTimeout(() => {
@@ -149,6 +149,22 @@ class Promise {
     })
     return promise2
   }
+  catch(cb) {
+    return this.then(null, cb)
+  }
+  finally(cb) {
+    // cb 必须接受一个函数 如果不是函数可能会报错  暂未做处理
+    return this.then(
+      (data) => {
+        return Promise.resolve(cb()).then(() => data)
+      },
+      (err) => {
+        return Promise.resolve(cb()).then(() => {
+          throw err
+        })
+      }
+    )
+  }
 }
 
 // 扩充 api
@@ -161,5 +177,98 @@ Promise.defer = Promise.deferred = function () {
   })
   return dfd
 }
+//扩展 5 个静态方法 2 个实例方法
+//静态方法resolve reject all allSettled race
 
+isPromise = (value) => {
+  if (
+    (typeof value === 'object' && value !== null) ||
+    typeof value === 'function'
+  ) {
+    if (typeof value.then === 'function') {
+      return true
+    } else {
+      return false
+    }
+  } else {
+    return false
+  }
+}
+//resolve
+Promise.resolve = (valve) => {
+  // valve可能是个promise,创建一个判断是否为peomise的函数,当是一个promise时候需要调用then方法进行一个promise返回
+  if (isPromise) {
+    try {
+      let then = value.then
+      return new promise(then.bind(value))
+    } catch (e) {
+      return new Promise((resolve, reject) => {
+        reject(valve)
+      })
+    }
+  } else {
+    return new Promise((resolve, reject) => {
+      resolve(valve)
+    })
+  }
+}
+//reject
+Promise.reject = (reason) => {
+  return new Promise((resolve, reject) => {
+    reject(reason)
+  })
+}
+//all 异步并发
+/**
+ * @param {values} 可迭代数组 每一项都是一个 promise
+ * 接收promise数组作为参数（从技术上讲，它可以是任何可迭代的，但通常是一个数组）并返回一个新的 promise
+ * 所有的 resolve 才会 resolve,任何一个 reject 就会 reject
+ * !更适合彼此相互依赖或者在其中任何一个 reject 时立即结束。
+ */
+Promise.all = function (values) {
+  return new Promise((resolve, reject) => {
+    let arr = []
+    let i = 0
+    function processData(index, value) {
+      arr[index] = value
+      if (++i === values.length) {
+        resolve(arr)
+      }
+    }
+    values.map((value) => {
+      if (isPromise(value)) {
+        value.then((data, index) => {
+          processData(index, data)
+        }, reject)
+      }
+    })
+  })
+}
+//allSettled
+//返回所有的项，不论成功失败
+/**
+ * 返回一个在所有给定的promise都已经 resolved 或 rejected 后的promise，结果里每一项都是一个对象数组，每个对象表示对应的promise结果。
+ * !当您有多个彼此不依赖的异步任务成功完成时，或者您总是想知道每个promise的结果时，通常使用它。
+ * {status:"fulfilled", value:result} 对于成功的响应，
+ * {status:"rejected", reason:error} 对于 error。
+ */
+Promise.allSettled = function (values) {
+  let resolveCb = (value) => {
+    status: 'fulfilled', value
+  }
+  let rejectCb = (reason) => {
+    status: 'rejected', reason
+  }
+  const convertedPromises = values.map((p) => {
+    Promise.resolve(p).then(resolveCb, rejectCb)
+  })
+  return Promise.all(convertedPromises)
+}
+//race
+//只要有个一个状态发生变化 立即返回 不论成功失败
+Promise.race = function (values) {
+  return new Promise((resolve, reject) => {
+    values.map((p) => Promise.resolve(p).then(resolve, reject))
+  })
+}
 module.exports = Promise
