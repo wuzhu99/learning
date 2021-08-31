@@ -6,23 +6,24 @@ const REJECTED = 'rejected' // 失败
 const resolvePromise = (promise2, x, resolve, reject) => {
   // promise2的调用限制，防止多次调用成功和失败
   // resolve和reject均被调用，或者被同一参数调用了多次，则优先采用首次调用并忽略剩下的调用
-  let called
   if (x === promise2) {
-    reject(
+    return reject(
       //如果promise和x指向同一对象，以TypeError为据因拒绝执行promise
       new TypeError('Chaining cycle detected for Promise #<Promise>')
     )
   }
   if ((typeof x === 'object' && x !== null) || typeof x === 'function') {
     // x为对象或函数
+    let called
     try {
+      let then = x.then
       // 把x.then赋值给then 能保证不能再用次取then的值
-      let then = x.then()
       if (typeof then === 'function') {
         // then如果是一个函数防止then方法可能会被Object.defineProperty定义,需要进行容错处理
         // 直接调用then并以当前调用成功的resolve作为resolve抛出，如果失败则以当前失败的reject作为Promise失败的原因
         then.call(
-          (y) => {
+          x,
+          y => {
             if (called) {
               return
             }
@@ -30,7 +31,7 @@ const resolvePromise = (promise2, x, resolve, reject) => {
             // y有可能还是一个Promise，递归调用resolvePromise直到解析出来的值是一个普通值/对象
             resolvePromise(promise2, y, resolve, reject)
           },
-          (r) => {
+          r => {
             if (called) {
               return
             }
@@ -63,22 +64,22 @@ class Promise {
     this.onFulfilledCbs = [] // 存放then成功回调的数组
     this.onRejectedCbs = [] // 存放then失败回调的数组
     // 成功 传入成功的值 status变为FULFILLED
-    let resolve = (value) => {
+    let resolve = value => {
       // 判断status 如果status改变就不会再被改变了，要么是成功态，要么是失败态
       if (this.status === PENDING) {
         this.status = FULFILLED
         this.value = value
         // 状态改变后依次执行
-        this.onFulfilledCbs.forEach((fn) => fn())
+        this.onFulfilledCbs.forEach(fn => fn())
       }
     }
     // 失败 失败传入的原因 status变为REJECTED
-    let reject = (reason) => {
+    let reject = reason => {
       if (this.status === PENDING) {
         this.status = REJECTED
         this.reason = reason
         // 状态改变后依次执行
-        this.onRejectedCbs.forEach((fn) => fn())
+        this.onRejectedCbs.forEach(fn => fn())
       }
     }
     try {
@@ -93,13 +94,11 @@ class Promise {
     onFulfilled =
       typeof onFulfilled === 'function'
         ? onFulfilled
-        : (data) => {
-            data
-          }
+        : data => data
     onRejected =
       typeof onRejected === 'function'
         ? onRejected
-        : (error) => {
+        : error => {
             throw error
           }
     // then方法可以被同一个promise调用多次  必然是返回了一个新的Promise
@@ -156,12 +155,12 @@ class Promise {
   }
   finally(fn) {
     return this.then(
-      (data) => {
+      data => {
         return Promise.resolve(fn()).then(() => {
           data
         })
       },
-      (err) => {
+      err => {
         return Promise.resolve(fn()).then(() => {
           throw err
         })
@@ -195,7 +194,7 @@ Promise.resolve = function (value) {
     })
   }
 }
-Promise.reject = (reason) => {
+Promise.reject = reason => {
   return new Promise((resolve, reject) => {
     reject(reason)
   })
@@ -219,10 +218,10 @@ Promise.all = function (values) {
           //       失败状态=》直接reject失败的原因
           // no: 当普通值处理 push到相应结果的数组
           value.then(
-            (res) => {
+            res => {
               resolveData(res, index)
             },
-            (err) => {
+            err => {
               reject(err)
             }
           )
@@ -235,27 +234,27 @@ Promise.all = function (values) {
     })
   })
 }
-Promise.allSettled = (values) => {
-  const result = values.map((p) => {
+Promise.allSettled = values => {
+  const result = values.map(p => {
     return Promise.resolve(p).then(
-      (value) => {
+      value => {
         return { status: 'fulfilled', value }
       },
-      (reason) => {
+      reason => {
         return { status: 'rejected', reason }
       }
     )
   })
   return Promise.all(result)
 }
-Promise.race = (values) => {
+Promise.race = values => {
   return new Promise((resolve, reject) => {
-    values.forEach((p) => {
+    values.forEach(p => {
       p.then(
-        (value) => {
+        value => {
           resolve(value)
         },
-        (reason) => {
+        reason => {
           reject(reason)
         }
       )
