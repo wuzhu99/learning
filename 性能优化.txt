@@ -1,0 +1,300 @@
+第一章
+  1.了解性能指标多快才算好？
+    网络请求
+      network
+        请求中的timing中的ttfb指标(网络请求耗时越大越差)
+        waterfall(瀑布图显示的是每个资源的加载情况)分蓝条(dom加载完成)和红条(页面所有资源加载完成的时间)
+      lighthouse
+        指标为黄的是警告,红的为性能需要优化,绿色为性能好(时间线来说的话是4秒内为优秀)
+      performance检测页面性能
+        画面流畅比如动画(人眼下1秒60帧看起来不卡)
+        shift+ctrl+p搜索fps可以开启网页的fps变化情况
+      优化异步请求到1秒
+  2.RAIL测量模型
+    response响应
+    animation动画
+    idle空闲(浏览器有足够空闲时间来响应用户交互)
+      通过performance分析
+    load加载
+    标准指标: 
+      100ms响应即浏览器50ms+事件处理50ms
+      动画每16ms产生一帧动画(60帧)分为6ms浏览器绘制+10ms一帧动画
+      要尽可能增加浏览器空闲时间比如把一些计算或者业务放端后端进行处理
+  3.性能测试工具
+    1.谷歌开发调试
+    2.lighthouse网站整体测评
+    3.webpageTest多测试地点、全面性能报告
+    4.检察元素界面ctrl+shift+p调出blocking(可以添加规则让网站不请求某些文件)
+  4.压缩请求例如node使用compress插件
+  5.performance检测页面性能(包括页面布局等等)
+    main: 主线程
+  6.network开发的时候可以去掉disabled cache不使用缓存方便开发调试
+  7.esc退出键谷歌浏览器可以调出常用功能
+  8.取到浏览器页面的状态
+    document.hidden || document.webkitHidden查看页面是否可见,监听事件为visibilitychange || webkitvisibilitychange
+  9.获取当前的网络状态
+    可以在网络状态不好的情况下使用较小的图片。网络状态好的就用高清的图片
+    let connection = navigator.connection || navigator.webkitConnection || navigator.mozConnection
+    connection.addEventListener('change', (e) => {
+        console.log(e)
+    })
+
+
+第二章
+  1.现代浏览器页面渲染的原理(关键渲染路径)
+    js -> style -> layout(布局: 主要关心位置和大小) -> paint(绘制) -> composite(混合:可能换面是绘制在多层类似ps的图层)
+    1.构建对象 html -> dom
+    2.构建cssom对象 css -> cssom
+    3.dom + cssom -> render tree
+    关键渲染路径: 优先显示与当前用户操作有关的内容(主要是布局和绘制消耗高)
+      回流(布局):
+        1.添加删除元素
+        2.display: none
+        3.css改变位置
+        4.字体大小变化
+        ！！！避免布局抖动:
+          1.如果读取dom的高或者宽会立即处理dom的变化布局。(强制回流)因此要进行读写分离(先批量进行读的操作在批量进行写的操作)
+          2.利用translate和transform位移来代替直接的top,left,right,bottom位移可以避免回流和重绘(translate和transform不会造成回流和重绘只会触发复合)
+          3.fastDom插件(主要是读写分离提升性能)
+    复合线程和图层(谷歌开发者工具shift+ctrl+p搜索layout调用图层监控页面)
+      将页面拆分成多个图层来提高性能
+    减少重绘
+      擅用translate和transform位移
+      提取元素到单独图层(使用will-change的css属性值可以是css的样式例如opcity,transform等来创建新的图层,尽量在最后优化的时候使用不要多用)
+  2.高频时间函数处理(防抖)
+    浏览器一帧的生命周期
+      事件触发 -> 每一帧开始 -> 调用raf(window.requestAnimationFrame来保证每次能保持60FPS) -> 布局layout -> paint绘制
+      window.requestAnimationFrame是先把js处理完在去布局和绘制(浏览器每一帧默认会执行的事件)
+      在动画使用结束的时候记得cancelAnimationFrame
+    去抖动: 控制window.requestAnimationFrame(callbackFn)来优化每一帧(例如滚动,鼠标滑过等高频事件我们要控制window.requestAnimationFrame的调用频率来进行优化)
+      let no = false
+      window.addEventListener('pointermove', (e) => {
+        if (no) return
+        no = true
+        window.requestAnimationFrame(() => {
+          no = false
+        })
+      })
+
+  3.react时间调度的实现(就是借助window.requestAnimationFrame)
+    1.repuestIdleCallback((60帧)一帧之内还有剩余的事件可以去做其他的事情,但是不能全部都占用掉,还是要留一部分出来给浏览器的)
+    2.通过requestAnimationFrame和setTimeout和postMessage模拟repuestIdleCallback
+
+
+第三章
+  1.js的开销和如何缩短解析时间
+    开销: 加载 -> 解析和编译 -> 执行
+    js的解析和编译, 执行要花很长时间(在谷歌开发工具中的performance中可以查看。选中main主线程中的某一段会出现summary选项)
+    解决方案
+      1.代码拆分按需加载
+      2.tree shaking代码减重
+      3.避免长任务
+      4.使用requestAnimationFrame和repuestIdleCallback进行时间调度
+  2.v8编译原理(代码优化)
+    1.解析js代码成抽象语法树 -> 字节码 -> 机器码
+      编译过程会进行优化
+      运行时可能会发生反优化
+    2.v8内部的优化
+      脚本流:边下载边解析
+      字节码缓存:常用的字节码会存起来(这个文件用到其他的文件也用到的参数)
+      函数懒解析:先解析用到的
+  3.对象优化(迎合v8进行优化)
+    1.保证对象初始化顺序一致(对象初始化时v8会生成隐藏属性以便后续复用并且是按照顺序排序的)
+    2.不要直接赋值对象新属性(追加的属性需要通过描述数组间接查找)
+    3.使用数组代替类数组(v8会对数组进行优化)比如先将类数组转化成数组
+    4.避免读取数组越界(比如for循环多查找1个下标会照成性能相差6倍)
+      1.造成undefined和数字比较
+      2.数组也是对象,当找不到对应下标的时候回沿着原型链向上找造成额外开销
+      3.业务上无效
+    5.避免元素类型转化(数组中放多种类型不利于v8引擎优化代码)
+  4.html优化
+    1.减少iframes使用
+    2.压缩空白符
+    3.避免嵌套层次太深
+    4.避免使用table布局
+    5.删除注释
+    6.css和js尽量外链
+    7.删除元素默认属性(比如默认checkbox等)
+    8.js放到html尾部(放在前面js加载会造成阻塞,影响后面dom的加载)
+  5.css性能的优化
+    1.降低css对渲染的阻塞(按需加载,放在dom前面加载)
+    2.利用gpu完成动画(前面讲到的复合)
+    3.使用contain进行优化(优化强度大。例如: contain:layout告诉浏览器这个节点内部的子元素和外面的元素没有任何关系。这样可以避免造成过多的回流布局)
+    4.使用font-display进行优化:让文字更早的显示在页面上,减轻文字闪动的问题
+
+
+第四章
+  1.资源优化
+    1.html压缩(https://html-minifier.com/包含了clear-css压缩css)
+    2.css压缩
+    3.js压缩与混淆(webpack压缩)
+    4.css和js合并(无冲突服务于相同模块,其他情况可能会造成其他的问题)
+  2.图片优化
+    1.传合适大小的图片
+    2.懒加载
+      1.部分浏览器现在有支持只需要在img标签上添加loading='lazy'
+      2.插件yall,blazy,lazyload,verlok
+      3.jpeg渐进式加载由模糊到清晰
+    3.图片压缩
+    4.响应式图片(img属性)
+      1.srcset属性: srcset="a.png 100vw, b.png 200vw" // 根据sizes去选图片(错过100vw的像素就选用b.png)
+      2.sizes属性: sizes="50vw" // 占比宽度
+      3.picture标签(支持不好)
+  3.字体优化
+    1.font-display: auto | block | swap | fallback | optional
+
+
+第四章(webpack相关)
+  1.tree-shaking
+    1.基于import export es6的语法导入
+    2.上下文未用到的代码
+    3.mode: production模式下
+    4.通过package.json中的sideEffects属性中可以取消某些文件的tree-shaking。例如:"sideEffects": ["*.css"]
+    5.babel中经常使用的preset是将babel做成集合如preset-env
+      如presets: [
+        [
+          "@babel/preset-env",
+          {
+            modules: false, // 保留es6的模块化语法(这样tree-shaking才起作用)
+            "target": {
+              "browsers": [">0.25%"] // 设置浏览器
+            },
+            "useBuilIns": "usage", // pollfill按需加载部分功能
+          }
+        ]
+      ]
+  2.js压缩(production模式下默认就有的功能)
+    1.weboack4引入uglifyjs-webpack-plugin
+    2.支持es6替换为terser-webpack-plugin
+    3.减小js体积
+  3.作用域提升(同样要配置babel不要转化es6)
+    1.代码体积减小
+    2.提高执行效率
+  4.babel7优化提升
+    1.pollfill按需加载部分功能"useBuilIns": "usage"
+    2.transform-runtime插件(避免多生成重复的函数例如编译多个class生成多个_classCallback)
+    3.根据浏览器进行优化
+  5.webpack打包速度优化
+    1.noParse(提高构建速度, 直接通知webpack忽略较大的库(不能是import、export、define等引入方式)在webpack配置的module字段下"noParse": /lodash/)
+    2.DllPlugin动态链接库
+  6.代码拆分
+    1.把单个bundle文件拆分成多个小文件
+    2.缩短首屏时间
+    3.手工定义入口
+    4.splitChunks(分块策略)提取公有代码,拆分业务代码与第三方库
+    5.动态加载改造(例如react的lazy懒加载组件)
+    6.资源压缩
+      1.terser压缩js
+      2.mini-css-extract-plugin压缩css
+        new miniCssExtractPlugin({ // css提取
+          fileName: '[name].[hash].css', // 打包的文件名
+          chunkFilename: '[id].[hash].css', // 拆分的代码文件名
+        })
+        new OptimizeCssAssetsPlugin({ // css压缩
+          cssProcessorPluginOptions: {
+            preset: [
+              'default', {
+                discardComments: {removeAll: true} // 注释删除
+              }
+            ]
+          },
+          canPrint: true
+        })
+      3.htmlWebpackPlugin-minify压缩html
+  7.webpack资源持久化缓存(webpack会通过文件内容去计算hash值,文件没有改变的话下次打包hash值不会变,便于浏览器缓存)
+    1.每个打包的资源文件有唯一的hash值
+    2.修改后只有受影响的文件hash变化
+    3.充分利用浏览器缓存
+  8.监测和分析
+    1.webpack Chart在线分析(需要使用webpack --profile --json > stats.json生成打包报告)
+    2.sourse-map-explorer插件(配置运行命令sourse-map-explorer 'build/*.js', webpack需要配置devtool: 'hidden-sourse-map')
+    3.speed-measure-webpack-plugin速度分析插件(build的时候能看到相关的构建时间)
+      let smp = new SpeedMeasureWebpackPlugin()
+      smp.warp(将webpack的配置放进来)
+  9.react按需加载
+    react router基于webpack按需加载(loadable插件)
+    npm install @loadable/component
+    const A = loadable(() => import('./page.tsx'), {
+      fallback: '<div>loading...</div>'
+    })
+
+
+第五章
+  1.传输加载优化
+    服务器启用gzip
+  2.keep Alive(持久TCP连接)
+    开启http的keepAlive有keepalive_timeout 65;65秒后关闭。keepalive_requests 100;请求100次后就关闭。
+  3.http缓存
+    最好是用no-cache(要用的时候需要在服务器那边Etag验证下)
+  4.service workers
+    1.加速重复访问
+    2.离线支持
+    通过workBoxWebpackPlugin配置: https://webpack.js.org/guides/progressive-web-application/#adding-workbox
+  5.http2
+  6.ssr服务端渲染
+    1.首屏加载
+    2.搜索引擎排名
+
+
+第六章(当下最优解决方案)
+  1.拯救移动端图片svg和iconfont
+  2.使用flex布局
+  3.prefetch和preload
+    prefetch: 提前加载后继路由需要的资源,优先级低 => <Link rel='prefetch' href='img/a.css' as='style'>import(/* webpackPrefetch: true */ 'ChartingLibrary');
+    preload: 提前加载较晚出现,但对当前页面非常重要的资源<Link rel='preload' href='img/a.png' as='image'>import(/* webpackPreload: true */ 'ChartingLibrary');
+  4.预渲染(
+      大型单页面应用瓶颈: js下载+解析+执行。
+      ssr主要解决TTFB补救首屏渲染较为复杂。
+      打包时提前渲染页面没有服务端渲染
+    )
+    react-snap(vue获react都能用)
+    npm install react-snap --save
+    配置命令'postbuild': 'react-snap'(postbuild是在build之后自动跑命令)
+    会发送样式闪动的问题需要配置package.json "reactSnap": {"inlineCss": true}
+    在根文件判断是否以经渲染好了子节点
+    let root = document.getElementById('app')
+    if (root.hasChildNodes) {
+      ReactDom.hydrate(<App />, root)
+    } else {
+      ReactDom.render(<App />, root)
+    }
+  5.windowing(窗口化)提高列表性能 -----> 虚拟列表
+    react-window插件实现
+  6.使用骨架组件减少布局移动
+    react-placeholder骨架屏插件
+    Skeleton/Placeholder作用
+    1.占位
+    2.提升用户感知能力
+
+
+第七章
+  通过面试题总结(url输入之后发生了什么？)
+  url解析
+    1.先判断是搜关键字还是站点
+    2.如果是站点就去查找域名对应的ip
+    3.如果是https链接需要建立tsl连接(如果301永久跳转的话就要重新发起请求)
+    4.设置请求的相关信息(html相关的文件或者接口数据并返回数据)
+    5.浏览器读取response数据并分析
+    6.浏览器进行安全监测(比如跨域、或者对比是否是黑名单的网站)
+  浏览器渲染
+    1.解析文本构建dom并加载子资源其中js的加载会造成阻塞(可以在script标签上加上async)
+    2.解析css计算style components构造布局树位置和大小
+    3.创建绘制记录确定绘制顺序
+    4.将页面拆分图层构建图层树
+    5.复合线程像素化图层创建一个复合帧
+  首屏加载优化
+    1.资源压缩、传输压缩、代码拆分、tree shaking、http缓存
+    2.路由懒加载、预渲染、inlineCss、虚拟列表
+    3.prefetch和preload调整加载顺序
+  js内存管理
+    js怎么管理内存？什么情况会造成内存泄漏？
+      通过变量是否能被访问到来判断内存是否释放！！！
+      局部变量: 函数执行完没有闭包引用会被标记回收
+      全局变量: 直到浏览器被卸载页面释放
+      回收机制:
+        引用计数: 每调用一次加一,当计数为0的时候进行回收。缺点是不能解决循环引用(例如a对象依赖于b对象,b对象依赖于a对象)。
+        标记清除(垃圾回收): 从根节点去访问,当访问到不能被访问的对象就进行标记然后进行垃圾回收。(当a对象中的b对象一直被访问,c对象没有被访问的情况就能不回收c对象)
+    解决
+      1.避免意外的全局变量
+      2.避免反复运行引发的闭包
+      3.避免脱离的dom元素没有被回收(所以react有ref这个api)
