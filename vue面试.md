@@ -1,7 +1,7 @@
 <!--
  * @Author: wuz
  * @Date: 2021-08-06 00:45:48
- * @LastEditTime: 2021-09-15 02:06:08
+ * @LastEditTime: 2021-09-26 15:45:46
  * @FilePath: /learning/vue面试.md
 -->
 ## 基础
@@ -53,6 +53,7 @@
   - 动态组件 :is
   - 异步：import
 - keepAlive
+- provide/inject
 - mixin
   - 多个组件有相同的逻辑抽离出来
   - 问题
